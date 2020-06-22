@@ -1,0 +1,91 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: starboard-security-operator
+  namespace: starboard
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: starboard-security-operator
+# TODO Allow creating jobs in only in the starboard namespace
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - "pods"
+      - "pods/log"
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - batch
+    resources:
+      - jobs
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+  - apiGroups:
+      - aquasecurity.github.io
+    resources:
+      - vulnerabilities
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: starboard-security-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: starboard-security-operator
+subjects:
+  - kind: ServiceAccount
+    name: starboard-security-operator
+    namespace: starboard
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: starboard-security-operator
+  namespace: starboard
+  labels:
+    app: starboard-security-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: starboard-security-operator
+  template:
+    metadata:
+      labels:
+        app: starboard-security-operator
+    spec:
+      serviceAccountName: starboard-security-operator
+      containers:
+        - name: operator
+          image: aquasec/starboard-security-operator:dev
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: OPERATOR_SCANNER_AQUA_CSP_VERSION
+              value: 4.6.20166
+            - name: OPERATOR_SCANNER_AQUA_CSP_HOST
+              value: http://csp-console-svc.aqua:8080
+            - name: OPERATOR_SCANNER_AQUA_CSP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: starboard-security-operator
+                  key:  OPERATOR_SCANNER_AQUA_CSP_USER
+            - name: OPERATOR_SCANNER_AQUA_CSP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: starboard-security-operator
+                  key: OPERATOR_SCANNER_AQUA_CSP_PASSWORD
